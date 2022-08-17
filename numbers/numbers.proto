@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+option go_package = "github.com/bmcgavin/numbers";
+
+package numbers;
+
+service Numbers {
+    rpc GetNumbers (NumbersRequest) returns (stream Number) {}
+}
+
+message NumbersRequest {
+    string UUID = 1;
+    optional uint32 Count = 2;
+}
+
+message Number {
+    uint32 Number = 1;
+}
