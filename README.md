@@ -6,7 +6,6 @@ Terminal 1:
 
 ```
 cd server
-go mod tidy
 go compile main.go
 ```
 
@@ -14,7 +13,6 @@ Terminal 2:
 
 ```
 cd client
-go mod tidy
 go compile main.go
 ```
 
@@ -24,7 +22,6 @@ Terminal 1:
 
 ```
 cd server
-go mod tidy
 go run main.go
 ```
 
@@ -32,7 +29,6 @@ Terminal 2:
 
 ```
 cd client
-go mod tidy
 go run main.go
 ```
 
