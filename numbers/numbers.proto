@@ -5,14 +5,16 @@ option go_package = "github.com/bmcgavin/numbers";
 package numbers;
 
 service Numbers {
-    rpc GetNumbers (NumbersRequest) returns (stream Number) {}
+    rpc GetNumbers (NumbersRequest) returns (stream NumbersResponse) {}
 }
 
 message NumbersRequest {
     string UUID = 1;
-    optional uint32 Count = 2;
+    optional uint64 Count = 2;
 }
 
-message Number {
+message NumbersResponse {
     uint32 Number = 1;
+    optional string Error = 2;
+    optional uint32 Checksum = 3;
 }

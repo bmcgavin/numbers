@@ -49,7 +49,7 @@ func (c *numbersClient) GetNumbers(ctx context.Context, in *NumbersRequest, opts
 }
 
 type Numbers_GetNumbersClient interface {
-	Recv() (*Number, error)
+	Recv() (*NumbersResponse, error)
 	grpc.ClientStream
 }
 
@@ -57,8 +57,8 @@ type numbersGetNumbersClient struct {
 	grpc.ClientStream
 }
 
-func (x *numbersGetNumbersClient) Recv() (*Number, error) {
-	m := new(Number)
+func (x *numbersGetNumbersClient) Recv() (*NumbersResponse, error) {
+	m := new(NumbersResponse)
 	if err := x.ClientStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
@@ -102,7 +102,7 @@ func _Numbers_GetNumbers_Handler(srv interface{}, stream grpc.ServerStream) erro
 }
 
 type Numbers_GetNumbersServer interface {
-	Send(*Number) error
+	Send(*NumbersResponse) error
 	grpc.ServerStream
 }
 
@@ -110,7 +110,7 @@ type numbersGetNumbersServer struct {
 	grpc.ServerStream
 }
 
-func (x *numbersGetNumbersServer) Send(m *Number) error {
+func (x *numbersGetNumbersServer) Send(m *NumbersResponse) error {
 	return x.ServerStream.SendMsg(m)
 }
 
