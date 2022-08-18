@@ -4,13 +4,13 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	hash "hash/crc32"
 	"io"
 	"log"
+	"math"
 	"math/rand"
 	"time"
 
-	pb "github.com/bmcgavin/numbers"
+	"github.com/bmcgavin/numbers"
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
@@ -22,59 +22,107 @@ var (
 	port             = flag.Int("port", 12345, "the port to connect to")
 	count            = flag.Uint64("count", 0, "number of messages to receive")
 	overrideClientID = flag.String("clientID", "", "[debug] override clientID'")
-	pauseAfter       = flag.Int("pauseAfter", 0, "[debug] pause after this many messages")
-	pauseFor         = flag.Int64("pauseFor", 3, "[debug] pause for this many seconds if pauseAfter != 0")
+
+	clientID = uuid.UUID{}
+	addr     = ""
 )
 
-func connect(ctx context.Context, addr string) (*grpc.ClientConn, error) {
+func connectGrpc(ctx context.Context, addr string) (*grpc.ClientConn, error) {
 
-	cp := keepalive.ClientParameters{
-		Time: 1 * time.Second,
+	ka := keepalive.ClientParameters{
+		Time:    500 * time.Millisecond,
+		Timeout: 100 * time.Millisecond,
 	}
 	conn, err := grpc.DialContext(ctx, addr,
-		grpc.WithTransportCredentials(insecure.NewCredentials(),
-			grpc.WithClientParameters(cp)),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithKeepaliveParams(ka),
 	)
 	return conn, err
 }
 
-func main() {
+func connectStream(ctx context.Context, conn *grpc.ClientConn, nr numbers.NumbersRequest) (numbers.Numbers_GetNumbersClient, error) {
+
+	c := numbers.NewNumbersClient(conn)
+
+	return c.GetNumbers(ctx, &nr)
+}
+
+func cli() {
 	flag.Parse()
-	addr := fmt.Sprintf("localhost:%d", *port)
+	addr = fmt.Sprintf("localhost:%d", *port)
 	if *count == 0 {
 		rand.Seed(time.Now().UnixNano())
 		*count = rand.Uint64() % 0xffff
 	}
-	fmt.Printf("%d", *count)
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-
-	conn, err := connect(ctx, addr)
-	if err != nil {
-		log.Fatalf("connect error %v", err)
-	}
-	defer conn.Close()
-	c := pb.NewNumbersClient(conn)
-
-	var u uuid.UUID
 	if *overrideClientID != "" {
-		u, err = uuid.Parse(*(overrideClientID))
+		var err error
+		clientID, err = uuid.Parse(*(overrideClientID))
 		if err != nil {
 			log.Fatalf("supplied clientID %s is not a UUID, %v", *overrideClientID, err)
 		}
 	} else {
-		u = uuid.New()
+		clientID = uuid.New()
 	}
-	nr := pb.NumbersRequest{UUID: u.String(), Count: count}
+}
 
-	stream, err := c.GetNumbers(ctx, &nr)
-	if err != nil {
-		log.Fatalf("couldn't get numbers %v", err)
+func reconnect(ctx context.Context, nr numbers.NumbersRequest) (*grpc.ClientConn, numbers.Numbers_GetNumbersClient, error) {
+	initialDelay := 1.1
+	maxRetries := 10
+	var stream numbers.Numbers_GetNumbersClient
+	var conn *grpc.ClientConn
+	var err error
+	for i := 0; i < maxRetries; i++ {
+		// backoff
+		sleepFor := math.Pow(float64(initialDelay), float64(i))
+		log.Printf("sleeping for %v", sleepFor)
+		time.Sleep(time.Duration(sleepFor) * time.Second)
+
+		// grpc connection
+		conn, err = connectGrpc(ctx, addr)
+		if err != nil {
+			log.Printf("failed to reconnect grpc %v", err)
+			continue
+		}
+
+		// stream connection
+		stream, err = connectStream(ctx, conn, nr)
+		if err != nil {
+			log.Printf("failed to reconnect stream %v", err)
+			continue
+		}
+		if stream != nil {
+			break
+		}
 	}
-	b := []byte{}
+	if err != nil {
+		return nil, nil, err
+	}
+	return conn, stream, nil
+}
+
+func main() {
+	cli()
+
+	// ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	// defer cancel()
+	ctx := context.Background()
+
+	conn, err := connectGrpc(ctx, addr)
+	if err != nil {
+		log.Fatalf("connect error %v", err)
+	}
+	defer conn.Close()
+
+	nr := numbers.NumbersRequest{UUID: clientID.String(), Count: count}
+
+	stream, err := connectStream(ctx, conn, nr)
+	if err != nil {
+		log.Fatalf("couldn't connect to the stream %v", err)
+	}
+	nums := []uint32{}
 	crc := uint32(0)
 	numReceived := 0
-	cNum := make(chan *pb.NumbersResponse, 1)
+	cNum := make(chan *numbers.NumbersResponse, 1)
 	cErr := make(chan error, 1)
 	done := false
 	for {
@@ -89,7 +137,7 @@ func main() {
 		select {
 		case number := <-cNum:
 			numReceived++
-			b = append(b, byte(number.Number))
+			nums = append(nums, number.Number)
 			log.Printf("number %v", number)
 			if number.Checksum != nil {
 				crc = *number.Checksum
@@ -99,13 +147,20 @@ func main() {
 				done = true
 				break
 			}
+			// this doesn't work but should be an RPC return code
+			if err == numbers.ErrStale {
+				log.Fatalf("%v", err)
+			}
 			if err != nil {
 				log.Printf("error %v", err)
-				ctx, cancel = context.WithTimeout(context.Background(), 6*time.Second)
-				connect(ctx, addr)
-
-				// time.Sleep(5 * time.Second)
+				// ctx, cancel = context.WithTimeout(context.Background(), 6*time.Second)
+				conn, stream, err = reconnect(ctx, nr)
+				if err != nil {
+					log.Fatalf("couldn't reconnect %v", err)
+				}
+				defer conn.Close()
 			}
+		// may be useless with the retry pinging, there's also a grpc native server config that could be used
 		case <-time.After(2 * time.Second):
 			log.Printf("timeout received")
 		}
@@ -113,11 +168,11 @@ func main() {
 		if done {
 			break
 		}
-
-		if *pauseAfter > 0 && *pauseAfter == numReceived {
-			cancel()
-		}
 	}
-	log.Printf("Checksum received: %v", crc)
-	log.Printf("Checksum calculated: %v", hash.Checksum(b, hash.IEEETable))
+	if crc == numbers.Checksum(nums) {
+		log.Printf("checksums match")
+	} else {
+		log.Printf("checksums do not match, got %v expected %v", crc, numbers.Checksum(nums))
+	}
+
 }
