@@ -85,4 +85,4 @@ Test the stale cache (30s expiry)
 ### Client
 
 - Quite messy, most of the time has been spent trying to work out how to get a GRPC server to misbehave.
-- If the client terminates and resends the same clientID then as it's stateless it doesn't have the numbers up to PTS. The server could rewind? Or the client has state too? Anyway, the overrideClientID arg is probably not useful except when checking that a clientID sent in a connection request after 30s is marked as stale and unuseable.
+- If the client terminates and resends the same clientID then as it's stateless it doesn't have the numbers up to PTS. The server could rewind? Or the client has state too? Anyway, the client's -clientID arg is probably not useful except when checking that a clientID sent in a connection request after 30s is marked as stale and unuseable.
