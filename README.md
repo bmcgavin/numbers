@@ -56,7 +56,7 @@ Test the stale cache (30s expiry)
 2. Note the client UUID
 3. Terminate the client
 4. Wait 30s
-5. Run the client with -overrideClientID <clientID>
+5. Run the client with -clientID <clientID>
 6. Watch the client fail, and the client not exit when it's supposed to because of the wrapped error
 
 ## Limitations
