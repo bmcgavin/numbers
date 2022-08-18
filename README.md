@@ -40,8 +40,8 @@ go run main.go
 
 Test the client reconnection in one of two ways :
 
-1. Run the server with a -failEvery <int> flag and the server with fail with an error when it hits the modulus of that number
-2. Run the server with a -failEvery <int> flag and a -goOfflineFor flag and the stream will send an error for that many seconds
+1. Run the server with a -failEvery \<int\> flag and the server with fail with an error when it hits the modulus of that number
+2. Run the server with a -failEvery \<int\> flag and a -goOfflineFor flag and the stream will send an error for that many seconds
 
 Test the checksum generation :
 
@@ -56,7 +56,7 @@ Test the stale cache (30s expiry)
 2. Note the client UUID
 3. Terminate the client
 4. Wait 30s
-5. Run the client with -clientID <clientID>
+5. Run the client with -clientID \<clientID\>
 6. Watch the client fail, and the client not exit when it's supposed to because of the wrapped error
 
 ## Limitations
